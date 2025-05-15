@@ -5,44 +5,46 @@ from sklearn.impute import IterativeImputer  # For imputing numeric data
 from sklearn.ensemble import RandomForestClassifier  # For imputing categorical data
 
 '''
-This function script was made with trial and error and the help of ChatGPT
+This script contains the class of functions used for the imputation.
+For imputation of numeric data, IterativeImputer is used, which is a multivariate imputer resembling MICE.
+For imputation of categorical data, RandomForestClassifier is used.
 '''
 
 # Define a custom class for imputation
 class assignment_impute:
     def __init__(self, max_iter=10):
         self.max_iter = max_iter
-        self.numeric_imputer = None  # will hold the IterativeImputer for numeric columns
-        self.categorical_classifiers = {}  # will store models for each categorical column
-        self.numeric_cols = None  # initializing numeric column names list
-        self.categorical_cols = None  # initializing categorical column names list
+        self.numeric_imputer = None  # Will hold the IterativeImputer for numeric columns
+        self.categorical_classifiers = {}  # Will store models for each categorical column
+        self.numeric_cols = None  # Initializing numeric column names list
+        self.categorical_cols = None  # Initializing categorical column names list
 
     def fit(self, data):
         # Separate column names by type (in lists created in __init__)
         self.numeric_cols = data.select_dtypes(include=[np.number]).columns
         self.categorical_cols = data.select_dtypes(exclude=[np.number]).columns
 
-        # Predict missing numbers using other numeric columns
+        # Predict missing numbers using IterativeImputer
         self.numeric_imputer = IterativeImputer(max_iter=self.max_iter, random_state=0)
         self.numeric_imputer.fit(data[self.numeric_cols])
 
         # Classifiers for each categorical column
         for col in self.categorical_cols:
-            if data[col].isnull().sum() == 0: # no "NaN" or "None" returns false == 0
+            if data[col].isnull().sum() == 0: # No "NaN" or "None" returns false == 0
                 continue  # Skip columns that don't have missing values
 
             # Only use rows where this column is not missing
             not_null_mask = data[col].notnull()
-            X_train = data.loc[not_null_mask].drop(columns=[col])  # features
-            y_train = data.loc[not_null_mask, col]  # target values
+            X_train = data.loc[not_null_mask].drop(columns=[col])  # Features
+            y_train = data.loc[not_null_mask, col]  # Target values
 
             # Fill missing values in other categorical columns with placeholder "Missing"
             X_train = X_train.copy()
             for other_col in self.categorical_cols:
-                if other_col != col:
+                if other_col != col: # Don't fill the target column
                     X_train[other_col] = X_train[other_col].fillna("Missing")
 
-            # Convert categorical variables into dummy/indicator variables
+            # Convert categorical variables into dummy variables
             X_train_encoded = pd.get_dummies(X_train, drop_first=True)
 
             # Train a RandomForestClassifier to predict missing values in this column
@@ -58,10 +60,10 @@ class assignment_impute:
     def transform(self, data):
         # Impute missing numeric values using the trained numeric imputer
         numeric = pd.DataFrame(
-            self.numeric_imputer.transform(data[self.numeric_cols]),  # fill in missing numbers
+            self.numeric_imputer.transform(data[self.numeric_cols]),  # Fill in missing numbers
             columns=self.numeric_cols,
             index=data.index
-        ).round(2)  # round to 2 decimals
+        ).round(2)  # Round to 2 decimals
 
         # Impute missing categorical values using trained classifiers
         categorical = data[self.categorical_cols].copy()
@@ -80,7 +82,7 @@ class assignment_impute:
             # Find rows where this column is missing
             missing_mask = categorical[col].isnull()
             if missing_mask.sum() == 0:
-                continue  # skip if nothing to impute
+                continue  # Skip if nothing to impute
 
             # Prepare input data for prediction
             X_missing = data.loc[missing_mask].drop(columns=[col])
@@ -105,7 +107,7 @@ class assignment_impute:
             categorical.loc[missing_mask, col] = predicted
 
         # Combine numeric and categorical data back together
-        imputed = pd.concat([numeric, categorical], axis=1)[data.columns]  # preserve column order
+        imputed = pd.concat([numeric, categorical], axis=1)[data.columns]  # Preserve column order
         return imputed
 
     def fit_transform(self, data):
